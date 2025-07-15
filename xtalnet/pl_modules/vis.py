@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from .transformer.transformer_encoder import TransformerEncoder, init_bert_params
 from .clip.model import _build_vision_tower
+from .clip.factory import get_vis_args
 
 import pdb
 
@@ -13,8 +14,16 @@ import pdb
 class VisModel(nn.Module):
     def __init__(self, args, max_seq_len=2048, pretrained=None):
         super().__init__()
-        args.max_seq_len = max_seq_len
         base_architecture(args)
+        self.model_cfg, self.preprocess_cfg = get_vis_args(**args.__dict__)
+        self.visual = _build_vision_tower(
+            embed_dim = self.model_cfg["embed_dim"],
+            vision_cfg = self.model_cfg["vision_cfg"],
+            quick_gelu = self.model_cfg["quick_gelu"],
+            cast_dtype = self.model_cfg["cast_dtype"],
+        )
+
+        args.max_seq_len = max_seq_len
         self.args = args
         self.padding_idx = 0
 
