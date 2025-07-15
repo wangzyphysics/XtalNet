@@ -25,6 +25,7 @@ from xtalnet.common.data_utils import (
     EPSILON, cart_to_frac_coords, mard, lengths_angles_to_volume, lattice_params_to_matrix_torch,
     frac_to_cart_coords, min_distance_sqr_pbc)
 
+from .vis import VisModel
 from .bert import BertModel
 from .diff_utils import RegressionHead
 from .cspnet_ccsg import CSPLayer, SinusoidsEmbedding
@@ -139,13 +140,13 @@ class BaseModule(pl.LightningModule):
 class CPCPModule(BaseModule):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.pxrd_encoder = BertModel(Namespace())
+        self.sxtal_encoder = VisModel(Namespace())
         self.crystal_encoder = hydra.utils.instantiate(self.hparams.crystal_encoder, _recursive_=False)
         self.logit_scale = nn.Parameter(torch.ones([1]))
     
     def inference(self, batch):
-        results = self.pxrd_encoder(batch)
-        pxrd_feat = results["cls_token"]
+        results = self.sxtal_encoder(batch)
+        sxtal_feat = results["cls_token"]
         lattices = lattice_params_to_matrix_torch(batch.lengths, batch.angles)
         atom_feat = self.crystal_encoder(batch.atom_types, batch.frac_coords, lattices, batch.num_atoms, batch.batch)
         results = {
@@ -154,36 +155,36 @@ class CPCPModule(BaseModule):
             'frac_coords' : batch.frac_coords,
             'lattices' : lattices
         }
-        pxrd_feat = F.normalize(pxrd_feat, dim=-1).float()
+        sxtal_feat = F.normalize(sxtal_feat, dim=-1).float()
         atom_feat = F.normalize(atom_feat, dim=-1).float()
         logit_scale = self.logit_scale.exp().float()
         
-        results['pxrd_feat'] = pxrd_feat
+        results['sxtal_feat'] = sxtal_feat
         results['atom_feat'] = atom_feat
         results['logit_scale'] = logit_scale
         return results
         
     def forward(self, batch):
-        results = self.pxrd_encoder(batch)
-        pxrd_feat = results["cls_token"]
+        results = self.sxtal_encoder(batch)
+        sxtal_feat = results["cls_token"]
         lattices = lattice_params_to_matrix_torch(batch.lengths, batch.angles)
         atom_feat = self.crystal_encoder(batch.atom_types, batch.frac_coords, lattices, batch.num_atoms, batch.batch)
         
         results = dict()
-        pxrd_feat = F.normalize(pxrd_feat, dim=-1).float()
+        sxtal_feat = F.normalize(sxtal_feat, dim=-1).float()
         atom_feat = F.normalize(atom_feat, dim=-1).float()
         logit_scale = self.logit_scale.exp().float()
 
-        logits_per_pxrd = logit_scale * pxrd_feat @ atom_feat.T
-        logits_per_atom = logit_scale * atom_feat @ pxrd_feat.T
-        labels = torch.arange(pxrd_feat.shape[0], device=pxrd_feat.device, dtype=torch.long)
-        pxrd_loss = F.cross_entropy(logits_per_pxrd, labels)
+        logits_per_sxtal = logit_scale * sxtal_feat @ atom_feat.T
+        logits_per_atom = logit_scale * atom_feat @ sxtal_feat.T
+        labels = torch.arange(sxtal_feat.shape[0], device=sxtal_feat.device, dtype=torch.long)
+        sxtal_loss = F.cross_entropy(logits_per_sxtal, labels)
         atom_loss = F.cross_entropy(logits_per_atom, labels)
-        total_loss = (pxrd_loss + atom_loss) / 2
+        total_loss = (sxtal_loss + atom_loss) / 2
 
         loss_dict = {
             'loss' : total_loss,
-            'loss_CPCP_pxrd' : pxrd_loss,
+            'loss_CPCP_sxtal' : sxtal_loss,
             'loss_CPCP_atom' : atom_loss
         }
         return loss_dict
@@ -193,12 +194,12 @@ class CPCPModule(BaseModule):
         output_dict = self(batch)
 
         loss = output_dict['loss']
-        loss_CPCP_pxrd = output_dict['loss_CPCP_pxrd']
+        loss_CPCP_sxtal = output_dict['loss_CPCP_sxtal']
         loss_CPCP_atom = output_dict['loss_CPCP_atom']
 
         self.log_dict(
             {'train_loss': loss,
-            'train_loss_CPCP_pxrd': loss_CPCP_pxrd,
+            'train_loss_CPCP_sxtal': loss_CPCP_sxtal,
             'train_loss_CPCP_atom': loss_CPCP_atom},
             on_step=True,
             on_epoch=True,
@@ -244,12 +245,12 @@ class CPCPModule(BaseModule):
     def compute_stats(self, output_dict, prefix):
 
         loss_CPCP_atom = output_dict['loss_CPCP_atom']
-        loss_CPCP_pxrd = output_dict['loss_CPCP_pxrd']
+        loss_CPCP_sxtal = output_dict['loss_CPCP_sxtal']
         loss = output_dict['loss']
 
         log_dict = {
             f'{prefix}_loss': loss,
-            f'{prefix}_loss_CPCP_pxrd': loss_CPCP_pxrd,
+            f'{prefix}_loss_CPCP_sxtal': loss_CPCP_sxtal,
             f'{prefix}_loss_CPCP_atom': loss_CPCP_atom
         }
 

@@ -5,27 +5,67 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .transformer.transformer_encoder import TransformerEncoder, init_bert_params
+from typing import Any, Dict, List, Union
 from .clip.model import _build_vision_tower
-from .clip.factory import get_vis_args
+from .clip.factory import create_model_and_transforms
 
 import pdb
 
 
 class VisModel(nn.Module):
+    """
+    Vision encoder model that wraps CLIP's visual tower obtained via create_model_and_transforms.
+    Behaves similarly to a BertModel but processes images instead of text.
+    """
+    def __init__(
+        self,
+        model_name: str,
+        precision: str = 'fp32',
+        device: Union[str, torch.device] = 'cpu',
+        output_dict: bool = False,  # FIXME: to be confirmed.
+        **create_kwargs: Any
+    ):
+        super().__init__()
+        # Create a CLIP model with randomly initialized weights (no pretraining)
+        clip_model, preprocess_train, preprocess_val = create_model_and_transforms(
+            model_name=model_name,
+            pretrained=None,
+            load_weights=False,
+            pretrained_image=False,
+            pretrained_text=False,
+            precision=precision,
+            device=device,
+            output_dict=output_dict,
+            **create_kwargs
+        )
+        # Extract the visual encoder
+        self.visual = clip_model.visual
+        # Optionally store transforms if needed
+        self.preprocess_train = preprocess_train
+        self.preprocess_val = preprocess_val
+
+    def forward(self, batch: Any) -> Dict[str, torch.Tensor]:
+        """
+        Args:
+            batch.images (torch.Tensor): Image batch tensor of shape [B, C, H, W].
+        Returns:
+            Dict[str, torch.Tensor]: 
+                features: raw image features [B, embed_dim]
+                cls_token: same as features, for compatibility with text encoder interfaces
+        """
+        images = batch.images
+        features = self.visual(images)
+        return {"features": features, "cls_token": features}
+
+
+
+class _VisModel(nn.Module):
     def __init__(self, args, max_seq_len=2048, pretrained=None):
         super().__init__()
-        base_architecture(args)
-        self.model_cfg, self.preprocess_cfg = get_vis_args(**args.__dict__)
-        self.visual = _build_vision_tower(
-            embed_dim = self.model_cfg["embed_dim"],
-            vision_cfg = self.model_cfg["vision_cfg"],
-            quick_gelu = self.model_cfg["quick_gelu"],
-            cast_dtype = self.model_cfg["cast_dtype"],
-        )
-
         args.max_seq_len = max_seq_len
         self.args = args
         self.padding_idx = 0
+        base_architecture(args)
 
         self.embed_tokens = nn.Sequential(
             nn.Linear(1, args.encoder_embed_dim),
