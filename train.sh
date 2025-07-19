@@ -1,7 +1,7 @@
 [ -z "${expname}" ] && expname="test"
 
 [ -z "${model}" ] && model="cpcp"
-[ -z "${data_name}" ] && data_name="hmof_400"
+[ -z "${data_name}" ] && data_name="hmof_100"
 
 [ -z "${freeze}" ] && freeze=false
 [ -z "${max_seq_len}" ] && max_seq_len=2048

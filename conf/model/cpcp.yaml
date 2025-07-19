@@ -5,3 +5,4 @@ freeze_pxrd_encoder: false
 defaults:
   - pxrd_encoder: bert
   - crystal_encoder: cpcp_crystal
+  - sxtal_encoder: vis

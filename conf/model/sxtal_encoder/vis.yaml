@@ -1,0 +1,5 @@
+_target_: xtalnet.pl_modules.vis.VisModel
+model_name: "ViT-B-16"
+precision: "fp32"
+device: "cuda"
+output_dict: false

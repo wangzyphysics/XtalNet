@@ -140,7 +140,7 @@ class BaseModule(pl.LightningModule):
 class CPCPModule(BaseModule):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.sxtal_encoder = VisModel(Namespace())
+        self.sxtal_encoder = hydra.utils.instantiate(self.hparams.sxtal_encoder, _recursive_=False)
         self.crystal_encoder = hydra.utils.instantiate(self.hparams.crystal_encoder, _recursive_=False)
         self.logit_scale = nn.Parameter(torch.ones([1]))
     
